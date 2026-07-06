@@ -377,6 +377,8 @@ def tab_settings(project_id: str, config: dict):
                 save_config(project_id, config)
                 st.rerun()
 
+    tab_yandex_login(project_id, config)
+
 
 # ─── ВЫБОР ГОРОДОВ: мультиселект + «Выбрать все» / «Снять все» ─────
 # ВАЖНО: default пустой (ничего не выбрано) — раньше выбирались все города
@@ -476,7 +478,7 @@ def tab_actualize(project_id: str, config: dict):
 # каждому городу. Единственное, что требует участия человека один раз — вход
 # в Яндекс (см. вкладку «Настройки» / первый запуск ниже), потому что код из SMS
 # может ввести только человек — так устроен сам Яндекс, это не ограничение Click.
-def tab_run(project_id: str, config: dict):
+def tab_run(project_id: str):
     tasks = list_task_files(project_id)
     st.write(f"Задач в очереди: **{len(tasks)}**")
     if tasks:
@@ -488,7 +490,7 @@ def tab_run(project_id: str, config: dict):
                 (project_base(project_id) / "tasks" / t).unlink(missing_ok=True)
             st.rerun()
 
-    tab_cloud_run(project_id, config)
+    tab_cloud_run(project_id)
 
 
 # ─── ВКЛАДКА: ОТЧЁТЫ И ЛОГИ ─────────────────────────────────────────
@@ -531,12 +533,18 @@ def tab_reports(project_id: str):
             st.text(log_file.read_text(encoding="utf-8", errors="replace")[-5000:])
 
 
-# ─── БЛОК ВНУТРИ «ЗАПУСК»: без Node/Puppeteer, через Playwright ──────
-# Нужен там, где нет Node.js (например, Streamlit Cloud). Вход — один раз,
-# через скриншот вместо окна браузера (браузер headless). После входа сессия
-# сохраняется, и публикация дальше идёт полностью в фоне, без скриншотов.
-def tab_cloud_run(project_id: str, config: dict):
+# ─── ВХОД В ЯНДЕКС (вкладка «Настройки», сразу под email/паролем) ───
+# Через Playwright, без Node.js — нужен там, где нет реального браузера
+# (например, Streamlit Cloud). Сначала пробуем автоматически по
+# email/паролю из настроек; если Яндекс просит что-то ещё (код, капчу,
+# подтверждение в приложении) — показываем скриншот вместо окна браузера,
+# как у входа через Яндекс ID в Дзене. После входа сессия сохраняется,
+# и публикация дальше идёт полностью в фоне, без скриншотов.
+def tab_yandex_login(project_id: str, config: dict):
     worker = get_playwright_worker("yb")
+
+    st.divider()
+    st.subheader("Вход в Яндекс")
 
     if yb.has_saved_session(project_id):
         st.success("✓ Сессия Яндекса уже сохранена — публикация будет работать без повторного входа.")
@@ -544,7 +552,6 @@ def tab_cloud_run(project_id: str, config: dict):
             yb.session_path(project_id).unlink(missing_ok=True)
             st.rerun()
     else:
-        st.subheader("Вход в Яндекс")
         step = st.session_state.get("yb_step", "idle")
 
         if step == "idle":
@@ -641,9 +648,16 @@ def tab_cloud_run(project_id: str, config: dict):
                 else:
                     st.warning("Похоже, вход ещё не завершён — посмотрите на новый снимок ниже.")
                 st.rerun()
+
+
+# ─── ВКЛАДКА «ЗАПУСК»: публикация/актуализация в фоне через Playwright ──
+def tab_cloud_run(project_id: str):
+    worker = get_playwright_worker("yb")
+
+    if not yb.has_saved_session(project_id):
+        st.info("Сначала войдите в Яндекс на вкладке «Настройки».")
         return
 
-    st.divider()
     st.subheader("Публикация в фоне")
 
     tasks = list_task_files(project_id)
@@ -729,7 +743,7 @@ def show_main(project_id: str):
     with tab2:
         tab_actualize(project_id, config)
     with tab3:
-        tab_run(project_id, config)
+        tab_run(project_id)
     with tab4:
         tab_reports(project_id)
     with tab5:
