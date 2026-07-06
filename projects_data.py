@@ -1182,6 +1182,136 @@ IMP_CITIES = [
     "country": "Армения",
     "name": "Ванадзор",
     "url": "https://yandex.ru/sprav/42876973/edit/posts/"
+  },
+  {
+    "country": "Россия",
+    "name": "Ангарск",
+    "url": "https://yandex.ru/sprav/97280321590/p/edit/posts/"
+  },
+  {
+    "country": "Россия",
+    "name": "Балашиха",
+    "url": "https://yandex.ru/sprav/137556584336/p/edit/posts/"
+  },
+  {
+    "country": "Россия",
+    "name": "Бийск",
+    "url": "https://yandex.ru/sprav/38498774496/p/edit/posts/"
+  },
+  {
+    "country": "Россия",
+    "name": "Братск",
+    "url": "https://yandex.ru/sprav/29670697394/p/edit/posts/"
+  },
+  {
+    "country": "Россия",
+    "name": "Владикавказ",
+    "url": "https://yandex.ru/sprav/119187051964/p/edit/posts/"
+  },
+  {
+    "country": "Россия",
+    "name": "Волжский",
+    "url": "https://yandex.ru/sprav/188025328500/p/edit/posts/"
+  },
+  {
+    "country": "Россия",
+    "name": "Грозный",
+    "url": "https://yandex.ru/sprav/186162021032/p/edit/posts/"
+  },
+  {
+    "country": "Россия",
+    "name": "Дзержинск",
+    "url": "https://yandex.ru/sprav/45497572260/p/edit/posts/"
+  },
+  {
+    "country": "Россия",
+    "name": "Йошкар-Ола",
+    "url": "https://yandex.ru/sprav/142057720685/p/edit/posts/"
+  },
+  {
+    "country": "Россия",
+    "name": "Комсомольск-на-Амуре",
+    "url": "https://yandex.ru/sprav/73405389728/p/edit/posts/"
+  },
+  {
+    "country": "Россия",
+    "name": "Королёв",
+    "url": "https://yandex.ru/sprav/211132148255/p/edit/posts/"
+  },
+  {
+    "country": "Россия",
+    "name": "Нальчик",
+    "url": "https://yandex.ru/sprav/103990463524/p/edit/posts/"
+  },
+  {
+    "country": "Россия",
+    "name": "Нижнекамск",
+    "url": "https://yandex.ru/sprav/32660321665/p/edit/posts/"
+  },
+  {
+    "country": "Россия",
+    "name": "Нижний Тагил",
+    "url": "https://yandex.ru/sprav/68443844252/p/edit/posts/"
+  },
+  {
+    "country": "Россия",
+    "name": "Орск",
+    "url": "https://yandex.ru/sprav/62091731656/p/edit/posts/"
+  },
+  {
+    "country": "Россия",
+    "name": "Петрозаводск",
+    "url": "https://yandex.ru/sprav/84651831460/p/edit/posts/"
+  },
+  {
+    "country": "Россия",
+    "name": "Прокопьевск",
+    "url": "https://yandex.ru/sprav/205983839411/p/edit/posts/"
+  },
+  {
+    "country": "Россия",
+    "name": "Псков",
+    "url": "https://yandex.ru/sprav/99590766901/p/edit/posts/"
+  },
+  {
+    "country": "Россия",
+    "name": "Саранск",
+    "url": "https://yandex.ru/sprav/47008151083/p/edit/posts/"
+  },
+  {
+    "country": "Россия",
+    "name": "Симферополь",
+    "url": "https://yandex.ru/sprav/95351474275/p/edit/posts/"
+  },
+  {
+    "country": "Россия",
+    "name": "Старый Оскол",
+    "url": "https://yandex.ru/sprav/15966111990/p/edit/posts/"
+  },
+  {
+    "country": "Россия",
+    "name": "Стерлитамак",
+    "url": "https://yandex.ru/sprav/159144673121/p/edit/posts/"
+  },
+  {
+    "country": "Россия",
+    "name": "Улан-Удэ",
+    "url": "https://yandex.ru/sprav/37896086396/p/edit/posts/"
+  },
+  {
+    "country": "Россия",
+    "name": "Химки",
+    "url": "https://yandex.ru/sprav/99770806216/p/edit/posts/"
+  },
+  {
+    "country": "Россия",
+    "name": "Череповец",
+    "url": "https://yandex.ru/sprav/59277589480/p/edit/posts/"
+  },
+  {
+    "country": "Россия",
+    "name": "Шахты",
+    "url": "https://yandex.ru/sprav/236218144611/p/edit/posts/"
   }
 ]
 
