@@ -401,6 +401,37 @@ def city_multiselect(key_prefix: str, country: dict) -> list[str]:
     )
 
 
+# ─── ВЫБОР СТРАН: чекбоксы + «Выбрать все» / «Снять все» ───────────
+# Раньше был один selectbox (одна страна за раз) — заменили на чекбоксы,
+# чтобы можно было выбрать сразу несколько стран.
+def country_checkboxes(key_prefix: str, config: dict) -> list[dict]:
+    countries = config["countries"]
+    state_key = f"{key_prefix}-selected-countries"
+    if state_key not in st.session_state:
+        st.session_state[state_key] = {}
+    for c in countries:
+        st.session_state[state_key].setdefault(c["id"], False)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Выбрать все страны", key=f"{key_prefix}-select-all-countries"):
+            for c in countries:
+                st.session_state[state_key][c["id"]] = True
+    with col2:
+        if st.button("Снять все страны", key=f"{key_prefix}-deselect-all-countries"):
+            for c in countries:
+                st.session_state[state_key][c["id"]] = False
+
+    cols = st.columns(3)
+    for i, c in enumerate(countries):
+        with cols[i % 3]:
+            st.session_state[state_key][c["id"]] = st.checkbox(
+                c["name"], value=st.session_state[state_key][c["id"]], key=f"{key_prefix}-country-cb-{c['id']}",
+            )
+
+    return [c for c in countries if st.session_state[state_key][c["id"]]]
+
+
 # ─── ВКЛАДКА: НОВЫЙ ПОСТ ────────────────────────────────────────────
 def tab_compose(project_id: str, config: dict):
     if not config["countries"]:
@@ -414,33 +445,51 @@ def tab_compose(project_id: str, config: dict):
     ]
     post_type = st.selectbox("Тип поста", [t["id"] for t in post_types], format_func=lambda pid: next(t["title"] for t in post_types if t["id"] == pid))
 
-    body = st.text_area("Основной текст (без контактов — добавятся автоматически)", height=150)
+    st.subheader("Страны")
+    selected_countries = country_checkboxes("compose", config)
 
-    country_names = [c["name"] for c in config["countries"]]
-    selected_country_name = st.selectbox("Страна", country_names)
-    country = next(c for c in config["countries"] if c["name"] == selected_country_name)
+    if not selected_countries:
+        st.info("Выберите хотя бы одну страну")
+        return
 
-    selected_city_ids = city_multiselect("compose", country)
+    per_country = {}
+    for country in selected_countries:
+        with st.expander(f"🌍 {country['name']}", expanded=True):
+            body = st.text_area(
+                "Основной текст (без контактов — добавятся автоматически)",
+                height=150, key=f"compose-body-{country['id']}",
+            )
+            selected_city_ids = city_multiselect(f"compose-{country['id']}", country)
 
-    uploaded_file = st.file_uploader("Картинка (необязательно)", type=["jpg", "jpeg", "png", "gif", "webp"])
-    image_path = None
-    if uploaded_file:
-        uploads_dir = project_base(project_id) / "uploads"
-        uploads_dir.mkdir(parents=True, exist_ok=True)
-        image_path = str(uploads_dir / f"{int(time.time())}-{safe_filename(uploaded_file.name)}")
-        with open(image_path, "wb") as f:
-            f.write(uploaded_file.getvalue())
+            uploaded_file = st.file_uploader(
+                "Картинка (необязательно)", type=["jpg", "jpeg", "png", "gif", "webp"],
+                key=f"compose-image-{country['id']}",
+            )
+            image_path = None
+            if uploaded_file:
+                uploads_dir = project_base(project_id) / "uploads"
+                uploads_dir.mkdir(parents=True, exist_ok=True)
+                image_path = str(uploads_dir / f"{int(time.time())}-{safe_filename(uploaded_file.name)}")
+                with open(image_path, "wb") as f:
+                    f.write(uploaded_file.getvalue())
 
-    if body.strip():
-        preview = build_final_text(project_id, selected_country_name, post_type, body)
-        st.text_area("Превью итогового текста", value=preview, height=200, disabled=True)
+            if body.strip():
+                preview = build_final_text(project_id, country["name"], post_type, body)
+                st.text_area("Превью итогового текста", value=preview, height=200, disabled=True, key=f"compose-preview-{country['id']}")
+
+            per_country[country["id"]] = (body, selected_city_ids, image_path)
 
     if st.button("Сохранить в задачи", type="primary"):
-        if not selected_city_ids:
-            st.error("Выберите хотя бы один город")
+        total = 0
+        for country in selected_countries:
+            body, city_ids, image_path = per_country[country["id"]]
+            if not city_ids:
+                continue
+            total += save_tasks(project_id, config, country["id"], city_ids, post_type, body, image_path)
+        if total == 0:
+            st.error("Выберите хотя бы один город в одной из выбранных стран")
         else:
-            count = save_tasks(project_id, config, country["id"], selected_city_ids, post_type, body, image_path)
-            st.success(f"Сохранено {count} городов в задачи")
+            st.success(f"Сохранено {total} городов в задачи")
 
 
 # ─── ВКЛАДКА: АКТУАЛИЗАЦИЯ ──────────────────────────────────────────
