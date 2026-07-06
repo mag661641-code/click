@@ -5,9 +5,9 @@ yb_playwright.py — вход и публикация в Яндекс.Бизне
 Node.js и настоящего браузера с окном. publish.js НЕ удалён и продолжает работать как
 раньше при локальном запуске — это просто дополнительный путь.
 
-Селекторы для входа и публикации взяты из publish.js (проверены вживую на реальных
-бизнес-аккаунтах — см. LOGIN_SELECTORS/PASSWORD_SELECTORS и комментарии ниже, это
-прямой перенос той же логики, просто на Playwright вместо Puppeteer).
+Селекторы входа записаны через playwright codegen на реальных проходах логина
+(ИМП и СМУ) — см. OTHER_METHOD_BUTTON и соседние константы ниже. Селекторы
+публикации (publish_to_city/actualize_city) — перенос логики из publish.js/actualize.js.
 
 Идея та же, что и в crosspost/*_playwright.py: браузер работает headless, для входа
 вместо реального окна показываем скриншот в Streamlit и собираем логин/пароль/код
@@ -54,16 +54,18 @@ def _ensure_chromium_installed():
         subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=False)
     _chromium_checked = True
 
-# Те же селекторы, что в publish.js (строки ~700 и ~775) — проверены вживую.
-LOGIN_SELECTORS = [
-    'input[name="login"]', 'input[data-t="field:input-login"]',
-    '#passp-field-login', 'input[type="email"]',
-    'input[autocomplete="username"]',
-]
-PASSWORD_SELECTORS = [
-    'input[name="passwd"]', 'input[data-t="field:input-passwd"]',
-    '#passp-field-passwd', 'input[type="password"]',
-    'input[autocomplete="current-password"]',
+# Записаны через playwright codegen — реальный проход входа Яндекс.ID
+# (звенья: телефон-экран → «Другой способ входа» → «Войти по логину» →
+# логин → пароль → 2 экрана-заглушки, которые пропускаем кнопкой Skip).
+OTHER_METHOD_BUTTON = '[data-testid="split-add-user-more-button"]'
+SWITCH_TO_LOGIN_OPTION = '[data-testid="menu-option-switchToLogin"]'
+GENERIC_TEXT_FIELD = '[data-testid="text-field-input"]'
+LOGIN_NEXT_BUTTON = '[data-testid="split-add-user-next-login"]'
+PASSWORD_NEXT_BUTTON = '[data-testid="password-next"]'
+EMAIL_CODE_NEXT_BUTTON = '[data-testid="challenges-email-code-next"]'
+POST_LOGIN_SKIP_BUTTONS = [
+    '[data-testid="webauthn-reg-later-button"]',
+    '[data-testid="identification-promo-start-skip-btn"]',
 ]
 
 
@@ -117,6 +119,9 @@ class YbLoginFlow:
             self.page = self.context.new_page()
             self.page.goto(PASSPORT_URL, wait_until="domcontentloaded")
             self.page.wait_for_timeout(1500)
+            # Яндекс по умолчанию открывает форму под телефон — переключаемся
+            # на вход по логину/паролю (записано через playwright codegen).
+            self._switch_to_login_by_password()
             return self.page.screenshot(full_page=True)
         except Exception:
             # Если что-то упало на середине (например, браузер убило по памяти),
@@ -126,12 +131,29 @@ class YbLoginFlow:
             self.close()
             raise
 
+    def _switch_to_login_by_password(self):
+        if self.page.locator(OTHER_METHOD_BUTTON).count() > 0:
+            self.page.click(OTHER_METHOD_BUTTON)
+            self.page.wait_for_timeout(600)
+        if self.page.locator(SWITCH_TO_LOGIN_OPTION).count() > 0:
+            self.page.click(SWITCH_TO_LOGIN_OPTION)
+            self.page.wait_for_timeout(800)
+
+    def _skip_post_login_prompts(self):
+        """
+        После пароля Яндекс может показать 1-2 экрана-заглушки (предложение
+        завести passkey, промо identification) — у обоих есть кнопка Skip.
+        """
+        for sel in POST_LOGIN_SKIP_BUTTONS:
+            if self.page.locator(sel).count() > 0:
+                self.page.click(sel)
+                self.page.wait_for_timeout(800)
+
     def submit_phone(self, phone: str) -> bytes:
         """
-        Консьюмерский UI Yandex ID (телефон) — встречается на свежей, ранее не
-        использовавшейся сессии. ВАЖНО: вводим через клавиатуру (page.keyboard.type),
-        а не .fill() — иначе ломается маска номера/страна (та же проблема была
-        у Дзена в crosspost, см. память по кросспостингу).
+        Резервный путь, если вдруг открылся именно телефонный экран и
+        переключиться на логин не удалось. ВАЖНО: вводим через клавиатуру
+        (page.keyboard.type), а не .fill() — иначе ломается маска номера/страна.
         """
         digits = "".join(ch for ch in phone if ch.isdigit())
         if digits.startswith("7") or digits.startswith("8"):
@@ -145,41 +167,43 @@ class YbLoginFlow:
         return self.page.screenshot(full_page=True)
 
     def submit_login(self, login_value: str) -> bytes:
-        for sel in LOGIN_SELECTORS:
-            if self.page.locator(sel).count() > 0:
-                self.page.click(sel, click_count=3)
-                self.page.keyboard.press("Backspace")
-                self.page.type(sel, login_value, delay=60)
-                break
-        if not _click_exact_button(self.page, ["войти"]):
+        field = self.page.locator(GENERIC_TEXT_FIELD).first
+        field.click()
+        field.fill(login_value)
+        if self.page.locator(LOGIN_NEXT_BUTTON).count() > 0:
+            self.page.click(LOGIN_NEXT_BUTTON)
+        else:
             self.page.keyboard.press("Enter")
-        self.page.wait_for_timeout(3000)
+        self.page.wait_for_timeout(2500)
         return self.page.screenshot(full_page=True)
 
     def submit_password(self, password: str) -> bytes:
-        for sel in PASSWORD_SELECTORS:
-            if self.page.locator(sel).count() > 0:
-                self.page.click(sel, click_count=3)
-                self.page.type(sel, password, delay=60)
-                break
-        if not _click_exact_button(self.page, ["войти"]):
+        field = self.page.locator(GENERIC_TEXT_FIELD).first
+        field.click()
+        field.fill(password)
+        if self.page.locator(PASSWORD_NEXT_BUTTON).count() > 0:
+            self.page.click(PASSWORD_NEXT_BUTTON)
+        else:
             self.page.keyboard.press("Enter")
-        self.page.wait_for_timeout(3000)
+        self.page.wait_for_timeout(2500)
+        self._skip_post_login_prompts()
         return self.page.screenshot(full_page=True)
 
     def submit_code(self, code: str) -> bytes:
-        """Код подтверждения (SMS/приложение) — если Яндекс его запросит."""
-        single_field_candidates = ['input[inputmode="numeric"]', 'input[type="tel"]', 'input[name="code"]']
-        for sel in single_field_candidates:
-            if self.page.locator(sel).count() == 1:
-                self.page.fill(sel, code)
-                self.page.wait_for_timeout(2500)
-                return self.page.screenshot(full_page=True)
-        digit_boxes = self.page.locator('input[maxlength="1"]')
-        if digit_boxes.count() >= len(code):
-            for i, digit in enumerate(code):
-                digit_boxes.nth(i).fill(digit)
-            self.page.wait_for_timeout(2500)
+        """
+        Код подтверждения, который Яндекс присылает на почту (записано через
+        playwright codegen на реальном СМУ-аккаунте) — то же общее поле, что
+        и у логина/пароля, плюс отдельная кнопка подтверждения.
+        """
+        field = self.page.locator(GENERIC_TEXT_FIELD).first
+        field.click()
+        field.fill(code)
+        if self.page.locator(EMAIL_CODE_NEXT_BUTTON).count() > 0:
+            self.page.click(EMAIL_CODE_NEXT_BUTTON)
+        else:
+            self.page.keyboard.press("Enter")
+        self.page.wait_for_timeout(2500)
+        self._skip_post_login_prompts()
         return self.page.screenshot(full_page=True)
 
     def is_logged_in(self) -> bool:
