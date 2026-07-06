@@ -14,3 +14,10 @@ libasound2
 libatspi2.0-0
 libx11-6
 libxext6
+libgtk-3-0
+libdbus-glib-1-2
+libxt6
+libx11-xcb1
+libpangocairo-1.0-0
+libpango-1.0-0
+libcairo2

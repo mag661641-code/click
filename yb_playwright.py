@@ -31,29 +31,33 @@ if sys.platform == "win32":
 
 PASSPORT_URL = "https://passport.yandex.ru/auth/welcome?origin=passport_auth2&retpath=https%3A%2F%2Fpassport.yandex.ru%2Fprofile"
 
-# На Streamlit Cloud (и вообще в свежем окружении) браузер Chromium для Playwright
-# заранее не установлен — там нет шага "postinstall", который есть локально
-# (npm install и т.п. просто ставит зависимости из requirements.txt, а сам браузер
-# нужно скачать отдельно). Проверяем при первом запуске и ставим, если его нет.
-_chromium_checked = False
+# На Streamlit Cloud (и вообще в свежем окружении) браузер для Playwright заранее
+# не установлен — там нет шага "postinstall", который есть локально (npm install
+# и т.п. просто ставит зависимости из requirements.txt, а сам браузер нужно
+# скачать отдельно). Проверяем при первом запуске и ставим, если его нет.
+#
+# Используем Firefox, а не Chromium: на бесплатном тарифе Streamlit Cloud (~1ГБ
+# RAM) headless Chromium стабильно падал (TargetClosedError) именно при рендере
+# тяжёлой SPA-страницы Яндекс.Паспорта, хотя about:blank открывался нормально —
+# похоже на нехватку памяти. У Firefox headless заметно ниже требования к памяти.
+_browser_checked = False
 
 
-def _ensure_chromium_installed():
-    global _chromium_checked
-    if _chromium_checked:
+def _launch_browser(p, headless: bool = True):
+    return p.firefox.launch(headless=headless)
+
+
+def _ensure_browser_installed():
+    global _browser_checked
+    if _browser_checked:
         return
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True, args=[
-        "--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu",
-        "--disable-extensions", "--disable-background-networking",
-        "--disable-default-apps", "--disable-sync", "--no-first-run",
-        "--mute-audio", "--disable-backgrounding-occluded-windows",
-    ])
+            browser = _launch_browser(p)
             browser.close()
     except Exception:
-        subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=False)
-    _chromium_checked = True
+        subprocess.run([sys.executable, "-m", "playwright", "install", "firefox"], check=False)
+    _browser_checked = True
 
 # Записаны через playwright codegen — реальный проход входа Яндекс.ID
 # (звенья: телефон-экран → «Другой способ входа» → «Войти по логину» →
@@ -107,15 +111,10 @@ class YbLoginFlow:
         self.page: Page | None = None
 
     def start(self) -> bytes:
-        _ensure_chromium_installed()
+        _ensure_browser_installed()
         try:
             self._playwright = sync_playwright().start()
-            self.browser = self._playwright.chromium.launch(headless=True, args=[
-                "--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu",
-                "--disable-extensions", "--disable-background-networking",
-                "--disable-default-apps", "--disable-sync", "--no-first-run",
-                "--mute-audio", "--disable-backgrounding-occluded-windows",
-            ])
+            self.browser = _launch_browser(self._playwright)
             self.context = self.browser.new_context(viewport={"width": 1000, "height": 700})
             # about:blank прошёл нормально, а реальная страница валила браузер —
             # похоже на нехватку памяти при рендеринге тяжёлой SPA. Режем самое
@@ -266,14 +265,9 @@ def publish_to_city(project_id: str, city_url: str, text: str) -> dict:
     if not path.exists():
         return {"ok": False, "error": "Нет сохранённой сессии Яндекса — сначала войдите на вкладке «Облако»"}
 
-    _ensure_chromium_installed()
+    _ensure_browser_installed()
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True, args=[
-        "--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu",
-        "--disable-extensions", "--disable-background-networking",
-        "--disable-default-apps", "--disable-sync", "--no-first-run",
-        "--mute-audio", "--disable-backgrounding-occluded-windows",
-    ])
+        browser = _launch_browser(p)
         context = browser.new_context(storage_state=str(path), viewport={"width": 1280, "height": 900})
         page = context.new_page()
         try:
@@ -329,13 +323,9 @@ def actualize_city(project_id: str, company_url: str) -> dict:
     if not edit_url:
         return {"ok": False, "error": "Не удалось определить URL раздела «Данные»"}
 
+    _ensure_browser_installed()
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True, args=[
-        "--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu",
-        "--disable-extensions", "--disable-background-networking",
-        "--disable-default-apps", "--disable-sync", "--no-first-run",
-        "--mute-audio", "--disable-backgrounding-occluded-windows",
-    ])
+        browser = _launch_browser(p)
         context = browser.new_context(storage_state=str(path), viewport={"width": 1280, "height": 900})
         page = context.new_page()
         try:
