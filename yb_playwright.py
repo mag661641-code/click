@@ -118,10 +118,11 @@ class YbLoginFlow:
             ])
             self.context = self.browser.new_context(viewport={"width": 1000, "height": 700})
             # about:blank прошёл нормально, а реальная страница валила браузер —
-            # похоже на нехватку памяти при рендеринге тяжёлой SPA. Режем всё,
-            # что не нужно для формы входа: картинки, шрифты, видео, стили.
+            # похоже на нехватку памяти при рендеринге тяжёлой SPA. Режем самое
+            # тяжёлое (картинки/шрифты/видео), но НЕ css — иначе скриншот для
+            # ручного шага (код/капча) станет нечитаемым.
             self.context.route(
-                re.compile(r".*\.(png|jpe?g|gif|webp|svg|woff2?|ttf|mp4|webm|css)(\?.*)?$", re.IGNORECASE),
+                re.compile(r".*\.(png|jpe?g|gif|webp|svg|woff2?|ttf|mp4|webm)(\?.*)?$", re.IGNORECASE),
                 lambda route: route.abort(),
             )
             self.page = self.context.new_page()
