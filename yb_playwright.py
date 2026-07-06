@@ -226,6 +226,21 @@ class YbLoginFlow:
         _click_exact_button(self.page, ["next", "continue", "войти", "продолжить", "далее"])
         self.page.wait_for_timeout(1500)
 
+    def click_next(self) -> bytes:
+        """
+        Просто жмём «Далее»/«Next», ничего не вводя — на случай, когда поле
+        (например, email) уже правильно заполнено само (Яндекс запомнил его)
+        и нужно только нажать кнопку.
+        """
+        self._dismiss_cookie_banner()
+        if self.page.locator(LOGIN_NEXT_BUTTON).count() > 0:
+            self.page.click(LOGIN_NEXT_BUTTON)
+            self.page.wait_for_timeout(1200)
+        if not _click_exact_button(self.page, ["next", "continue", "войти", "продолжить", "далее"]):
+            self.page.keyboard.press("Enter")
+        self.page.wait_for_timeout(1500)
+        return self.page.screenshot(full_page=True)
+
     def submit_login(self, login_value: str) -> bytes:
         self._submit_generic_field(login_value, LOGIN_NEXT_BUTTON)
         return self.page.screenshot(full_page=True)

@@ -579,6 +579,16 @@ def tab_yandex_login(project_id: str, config: dict):
 
         elif step == "first":
             st.image(st.session_state.yb_screenshot, caption="Посмотрите, что просит страница, и заполните нужное поле")
+
+            flow: yb.YbLoginFlow = st.session_state.yb_flow
+            st.caption("Если email/логин уже правильно показан на картинке — ничего не вводите, просто нажмите:")
+            if st.button("Продолжить (ничего не менять)", key="yb-just-next"):
+                with st.spinner("Жму «Далее»..."):
+                    screenshot = worker.call(flow.click_next)
+                st.session_state.yb_screenshot = screenshot
+                st.session_state.yb_step = "next"
+                st.rerun()
+
             col1, col2 = st.columns(2)
             with col1:
                 st.markdown("**Если просит телефон**")
@@ -589,7 +599,6 @@ def tab_yandex_login(project_id: str, config: dict):
                 login_value = st.text_input("Логин или e-mail", key="yb-login")
                 login_clicked = st.button("Отправить логин", key="yb-submit-login")
 
-            flow: yb.YbLoginFlow = st.session_state.yb_flow
             screenshot = None
             if phone_clicked and phone:
                 with st.spinner("Отправляю номер телефона..."):
