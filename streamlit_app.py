@@ -795,18 +795,24 @@ def show_main(project_id: str):
 
     config = load_config(project_id)
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(
-        ["Публикация", "Актуализация", "Запуск", "Отчёт", "Настройки"]
+    # ВАЖНО: не используем st.tabs() — на Cloud у некоторых пользователей его
+    # CSS/JS не отрисовывался, и содержимое всех вкладок просто стопкой
+    # выводилось на одну страницу (как лендинг), без переключения. Радио-кнопки
+    # не зависят от этого — рендерится по-настоящему только один раздел.
+    section = st.radio(
+        "Раздел", ["Публикация", "Актуализация", "Запуск", "Отчёт", "Настройки"],
+        horizontal=True, label_visibility="collapsed", key="main-section",
     )
-    with tab1:
+    st.divider()
+    if section == "Публикация":
         tab_compose(project_id, config)
-    with tab2:
+    elif section == "Актуализация":
         tab_actualize(project_id, config)
-    with tab3:
+    elif section == "Запуск":
         tab_run(project_id)
-    with tab4:
+    elif section == "Отчёт":
         tab_reports(project_id)
-    with tab5:
+    elif section == "Настройки":
         tab_settings(project_id, config)
 
 
