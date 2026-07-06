@@ -134,6 +134,9 @@ class YbLoginFlow:
                 raise RuntimeError(f"Chromium не пережил даже about:blank (ресурсы контейнера): {e}") from e
             self.page.goto(PASSPORT_URL, wait_until="domcontentloaded")
             self.page.wait_for_timeout(1500)
+            # Баннер согласия на cookie перекрывает форму и блокирует клики по
+            # «Другой способ входа» (типичная проблема headless) — закрываем его.
+            self._dismiss_cookie_banner()
             # Яндекс по умолчанию открывает форму под телефон — переключаемся
             # на вход по логину/паролю (записано через playwright codegen).
             self._switch_to_login_by_password()
@@ -145,6 +148,18 @@ class YbLoginFlow:
             # потому что предыдущий (незакрытый) экземпляр уже владеет циклом событий.
             self.close()
             raise
+
+    def _dismiss_cookie_banner(self):
+        if not _click_exact_button(self.page, ["allow all", "принять все", "accept all", "разрешить все"]):
+            # Некоторые варианты баннера — не <button>, а div/span с ролью banner;
+            # запасной путь — по видимому тексту через get_by_text.
+            try:
+                btn = self.page.get_by_text(re.compile(r"^(allow all|принять все|accept all)$", re.IGNORECASE))
+                if btn.count() > 0:
+                    btn.first.click()
+            except Exception:
+                pass
+        self.page.wait_for_timeout(400)
 
     def _switch_to_login_by_password(self):
         if self.page.locator(OTHER_METHOD_BUTTON).count() > 0:
