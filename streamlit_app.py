@@ -337,6 +337,8 @@ def tab_settings(project_id: str, config: dict):
         config["password"] = password
         save_config(project_id, config)
 
+    tab_yandex_login(project_id, config)
+
     st.divider()
     st.subheader("Страны и города")
 
@@ -376,8 +378,6 @@ def tab_settings(project_id: str, config: dict):
                 config["countries"].remove(country)
                 save_config(project_id, config)
                 st.rerun()
-
-    tab_yandex_login(project_id, config)
 
 
 # ─── ВЫБОР ГОРОДОВ: мультиселект + «Выбрать все» / «Снять все» ─────
