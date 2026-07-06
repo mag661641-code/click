@@ -704,32 +704,62 @@ def tab_cloud(project_id: str, config: dict):
     tasks = list_task_files(project_id)
     if not tasks:
         st.info("Очередь задач пуста — сначала сохраните пост на вкладке «Новый пост».")
-        return
+    else:
+        st.write(f"Задач в очереди: **{len(tasks)}**")
+        if st.button("☁️ Опубликовать в фоне (без Node)", type="primary", key="yb-publish"):
+            results = []
+            progress = st.progress(0.0)
+            status = st.empty()
+            tasks_dir = project_base(project_id) / "tasks"
+            done_dir = tasks_dir / "done"
+            done_dir.mkdir(parents=True, exist_ok=True)
 
-    st.write(f"Задач в очереди: **{len(tasks)}**")
-    if st.button("☁️ Опубликовать в фоне (без Node)", type="primary", key="yb-publish"):
-        results = []
-        progress = st.progress(0.0)
-        status = st.empty()
-        tasks_dir = project_base(project_id) / "tasks"
-        done_dir = tasks_dir / "done"
-        done_dir.mkdir(parents=True, exist_ok=True)
+            for i, task_file in enumerate(tasks):
+                data = json.loads((tasks_dir / task_file).read_text(encoding="utf-8"))
+                for city_task in data.get("tasks", []):
+                    status.text(f"Публикую: {city_task['cityName']}...")
+                    result = worker.call(yb.publish_to_city, project_id, city_task["companyUrl"], city_task["postText"])
+                    results.append((city_task["cityName"], result))
+                (tasks_dir / task_file).rename(done_dir / task_file)
+                progress.progress((i + 1) / len(tasks))
 
-        for i, task_file in enumerate(tasks):
-            data = json.loads((tasks_dir / task_file).read_text(encoding="utf-8"))
-            for city_task in data.get("tasks", []):
-                status.text(f"Публикую: {city_task['cityName']}...")
-                result = worker.call(yb.publish_to_city, project_id, city_task["companyUrl"], city_task["postText"])
-                results.append((city_task["cityName"], result))
-            (tasks_dir / task_file).rename(done_dir / task_file)
-            progress.progress((i + 1) / len(tasks))
+            status.empty()
+            for city_name, result in results:
+                if result.get("ok"):
+                    st.success(f"✅ {city_name}: {result.get('status')}")
+                else:
+                    st.error(f"❌ {city_name}: {result.get('error')}")
 
-        status.empty()
-        for city_name, result in results:
-            if result.get("ok"):
-                st.success(f"✅ {city_name}: {result.get('status')}")
-            else:
-                st.error(f"❌ {city_name}: {result.get('error')}")
+    st.divider()
+    st.subheader("Актуализация в фоне")
+
+    actualize_tasks = list_actualize_task_files(project_id)
+    if not actualize_tasks:
+        st.info("Очередь актуализации пуста — сначала сохраните на вкладке «Актуализация».")
+    else:
+        st.write(f"Задач актуализации в очереди: **{len(actualize_tasks)}**")
+        if st.button("☁️ Актуализировать в фоне (без Node)", key="yb-actualize"):
+            results = []
+            progress = st.progress(0.0)
+            status = st.empty()
+            tasks_dir = project_base(project_id) / "tasks-actualize"
+
+            for i, task_file in enumerate(actualize_tasks):
+                data = json.loads((tasks_dir / task_file).read_text(encoding="utf-8"))
+                for city_task in data.get("tasks", []):
+                    status.text(f"Проверяю: {city_task['cityName']}...")
+                    result = worker.call(yb.actualize_city, project_id, city_task["companyUrl"])
+                    results.append((city_task["cityName"], result))
+                (tasks_dir / task_file).unlink()
+                progress.progress((i + 1) / len(actualize_tasks))
+
+            status.empty()
+            for city_name, result in results:
+                if result.get("ok"):
+                    label = "актуализировано" if result.get("status") == "actualized" else "уже актуально"
+                    st.success(f"✅ {city_name}: {label}")
+                else:
+                    st.error(f"❌ {city_name}: {result.get('error')}")
 
 
 # ─── ГЛАВНЫЙ ЭКРАН ──────────────────────────────────────────────────

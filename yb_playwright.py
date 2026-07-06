@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -28,6 +29,25 @@ if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 PASSPORT_URL = "https://passport.yandex.ru/auth/welcome?origin=passport_auth2&retpath=https%3A%2F%2Fpassport.yandex.ru%2Fprofile"
+
+# На Streamlit Cloud (и вообще в свежем окружении) браузер Chromium для Playwright
+# заранее не установлен — там нет шага "postinstall", который есть локально
+# (npm install и т.п. просто ставит зависимости из requirements.txt, а сам браузер
+# нужно скачать отдельно). Проверяем при первом запуске и ставим, если его нет.
+_chromium_checked = False
+
+
+def _ensure_chromium_installed():
+    global _chromium_checked
+    if _chromium_checked:
+        return
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            browser.close()
+    except Exception:
+        subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=False)
+    _chromium_checked = True
 
 # Те же селекторы, что в publish.js (строки ~700 и ~775) — проверены вживую.
 LOGIN_SELECTORS = [
@@ -79,6 +99,7 @@ class YbLoginFlow:
         self.page: Page | None = None
 
     def start(self) -> bytes:
+        _ensure_chromium_installed()
         self._playwright = sync_playwright().start()
         self.browser = self._playwright.chromium.launch(headless=True)
         self.context = self.browser.new_context(viewport={"width": 1280, "height": 900})
@@ -187,6 +208,7 @@ def publish_to_city(project_id: str, city_url: str, text: str) -> dict:
     if not path.exists():
         return {"ok": False, "error": "Нет сохранённой сессии Яндекса — сначала войдите на вкладке «Облако»"}
 
+    _ensure_chromium_installed()
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         context = browser.new_context(storage_state=str(path), viewport={"width": 1280, "height": 900})
@@ -215,6 +237,70 @@ def publish_to_city(project_id: str, city_url: str, text: str) -> dict:
 
             context.storage_state(path=str(path))
             return {"ok": True, "status": "Опубликовано"}
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "error": str(e)}
+        finally:
+            browser.close()
+
+
+import re
+
+
+def _build_edit_url(company_url: str) -> str | None:
+    """Из actualize.js: приводим URL карточки к разделу /edit/ (с учётом /p/ или без)."""
+    m = re.search(r"/sprav/(\d+)/(p/)?edit", company_url or "")
+    if not m:
+        return None
+    company_id, has_p = m.group(1), m.group(2)
+    return f"https://yandex.ru/sprav/{company_id}/p/edit/" if has_p else f"https://yandex.ru/sprav/{company_id}/edit/"
+
+
+def actualize_city(project_id: str, company_url: str) -> dict:
+    """
+    Актуализирует данные одного города (жмёт «Данные актуальны», если кнопка
+    появилась) — перенесено из actualize.js, та же логика поиска кнопки/тоста.
+    Полностью headless, использует сохранённую сессию Яндекса.
+    """
+    path = session_path(project_id)
+    if not path.exists():
+        return {"ok": False, "error": "Нет сохранённой сессии Яндекса — сначала войдите на вкладке «Облако»"}
+
+    edit_url = _build_edit_url(company_url)
+    if not edit_url:
+        return {"ok": False, "error": "Не удалось определить URL раздела «Данные»"}
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(storage_state=str(path), viewport={"width": 1280, "height": 900})
+        page = context.new_page()
+        try:
+            page.goto(edit_url, wait_until="domcontentloaded", timeout=30000)
+            page.wait_for_timeout(2500)
+
+            # Кнопка "Данные актуальны" — точный текст, как в actualize.js.
+            coords = page.evaluate(
+                r"""() => {
+                    const btns = document.querySelectorAll('button, [role="button"]');
+                    for (const b of btns) {
+                        const t = (b.textContent || '').trim().toLowerCase();
+                        if (!t || t.length > 50) continue;
+                        if (/^данные\s+актуальны$/i.test(t) || /^актуализ[а-я]*\s+данные$/i.test(t)) {
+                            const r = b.getBoundingClientRect();
+                            if (r.width >= 80 && r.height >= 20 && !b.disabled) {
+                                return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+                            }
+                        }
+                    }
+                    return null;
+                }"""
+            )
+            if not coords:
+                # Кнопки нет — данные уже актуальны, это нормальный исход, не ошибка.
+                return {"ok": True, "status": "not-needed"}
+
+            page.mouse.click(coords["x"], coords["y"])
+            page.wait_for_timeout(2000)
+            return {"ok": True, "status": "actualized"}
         except Exception as e:  # noqa: BLE001
             return {"ok": False, "error": str(e)}
         finally:
