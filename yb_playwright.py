@@ -151,20 +151,26 @@ class YbLoginFlow:
 
     def _dismiss_cookie_banner(self):
         """
-        Баннер согласия на cookie нередко рендерится внутри iframe — обычный
-        поиск в self.page (только главный документ) его не находит. Проверяем
-        главную страницу и все вложенные фреймы.
+        Баннер согласия на cookie не только перекрывает самый первый экран —
+        он остаётся поверх и мешает кликать по кнопкам на следующих шагах
+        (например, «Continue» после ввода кода). Поэтому вызываем перед КАЖДЫМ
+        кликом next-кнопки, а не один раз. Пробуем несколько раз с паузой,
+        т.к. баннер может появиться не сразу, и ищем по роли (надёжнее текста),
+        по всем фреймам на случай, если виджет в iframe.
         """
-        pattern = re.compile(r"^(allow all|принять все|accept all|разрешить все)$", re.IGNORECASE)
-        for frame in self.page.frames:  # includes the main frame
-            try:
-                btn = frame.get_by_text(pattern, exact=True)
-                if btn.count() > 0:
-                    btn.first.click(timeout=2000)
-                    self.page.wait_for_timeout(400)
-                    return
-            except Exception:
-                continue
+        names = ["Allow all", "Принять все", "Accept all", "Разрешить все"]
+        for _ in range(3):
+            for frame in self.page.frames:  # includes the main frame
+                for name in names:
+                    try:
+                        btn = frame.get_by_role("button", name=name, exact=True)
+                        if btn.count() > 0:
+                            btn.first.click(timeout=1500, force=True)
+                            self.page.wait_for_timeout(400)
+                            return
+                    except Exception:
+                        continue
+            self.page.wait_for_timeout(500)
 
     def _switch_to_login_by_password(self):
         if self.page.locator(OTHER_METHOD_BUTTON).count() > 0:
@@ -205,6 +211,7 @@ class YbLoginFlow:
         field = self.page.locator(GENERIC_TEXT_FIELD).first
         field.click()
         field.fill(login_value)
+        self._dismiss_cookie_banner()
         if self.page.locator(LOGIN_NEXT_BUTTON).count() > 0:
             self.page.click(LOGIN_NEXT_BUTTON)
         else:
@@ -216,6 +223,7 @@ class YbLoginFlow:
         field = self.page.locator(GENERIC_TEXT_FIELD).first
         field.click()
         field.fill(password)
+        self._dismiss_cookie_banner()
         if self.page.locator(PASSWORD_NEXT_BUTTON).count() > 0:
             self.page.click(PASSWORD_NEXT_BUTTON)
         else:
@@ -233,6 +241,7 @@ class YbLoginFlow:
         field = self.page.locator(GENERIC_TEXT_FIELD).first
         field.click()
         field.fill(code)
+        self._dismiss_cookie_banner()
         if self.page.locator(EMAIL_CODE_NEXT_BUTTON).count() > 0:
             self.page.click(EMAIL_CODE_NEXT_BUTTON)
         else:
