@@ -21,9 +21,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
-import subprocess
-import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -305,25 +302,6 @@ def list_actualize_task_files(project_id: str) -> list[str]:
     return sorted(f.name for f in tasks_dir.glob("*.json"))
 
 
-# ─── ЗАПУСК NODE-ПРОЦЕССОВ (то же, что /api/run в app.js) ──────────
-def run_node_script(project_id: str, script: str, args: list[str] | None = None):
-    env = {**os.environ, "CLICK_PROJECT": project_id, "CLICK_PROJECT_DIR": project_id, "FORCE_COLOR": "0", "NO_COLOR": "1"}
-    cmd = ["node", script] + (args or [])
-    proc = subprocess.Popen(
-        cmd, cwd=str(ROOT), env=env,
-        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        text=True, encoding="utf-8", errors="replace",
-        bufsize=1,
-    )
-    return proc
-
-
-def stream_process_output(proc: subprocess.Popen, log_lines: list[str]):
-    for line in proc.stdout:
-        log_lines.append(line)
-    proc.wait()
-
-
 # ─── ЭКРАН ЛОГИНА ───────────────────────────────────────────────────
 def show_login():
     st.title("📮 Click")
@@ -493,6 +471,11 @@ def tab_actualize(project_id: str, config: dict):
 
 
 # ─── ВКЛАДКА: ЗАПУСК ────────────────────────────────────────────────
+# Публикация полностью в фоне: нажали кнопку — браузер работает скрыто (headless),
+# никакого окна не открывается, ждёте несколько секунд — приходит результат по
+# каждому городу. Единственное, что требует участия человека один раз — вход
+# в Яндекс (см. вкладку «Настройки» / первый запуск ниже), потому что код из SMS
+# может ввести только человек — так устроен сам Яндекс, это не ограничение Click.
 def tab_run(project_id: str):
     tasks = list_task_files(project_id)
     st.write(f"Задач в очереди: **{len(tasks)}**")
@@ -505,64 +488,7 @@ def tab_run(project_id: str):
                 (project_base(project_id) / "tasks" / t).unlink(missing_ok=True)
             st.rerun()
 
-    st.divider()
-
-    if "run_proc" not in st.session_state:
-        st.session_state.run_proc = None
-        st.session_state.run_log = []
-
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        start_publish = st.button("▶️ Запустить публикацию", disabled=st.session_state.run_proc is not None)
-    with col2:
-        start_actualize = st.button("🔄 Актуализация", disabled=st.session_state.run_proc is not None)
-    with col3:
-        stop_clicked = st.button("⏹ Остановить", disabled=st.session_state.run_proc is None)
-
-    if start_publish:
-        st.session_state.run_log = []
-        st.session_state.run_action = "publish"
-        proc = run_node_script(project_id, "publish.js")
-        st.session_state.run_proc = proc
-
-        # ВАЖНО: publish.js спрашивает "y/n" ТОЛЬКО если stdin — реальный терминал
-        # (process.stdin.isTTY). У нас stdin — пайп (не TTY), значит подтверждение
-        # публикация уже пропускает сама, писать "y" не нужно.
-        # Раньше здесь была пауза в 3.5с перед чтением вывода (чтобы успеть отправить
-        # "y") — из-за неё буфер вывода Node успевал переполниться, пока никто его не
-        # читал, и publish.js зависал на записи в середине списка городов. Теперь
-        # читаем вывод сразу же, без задержки.
-        threading.Thread(target=stream_process_output, args=(proc, st.session_state.run_log), daemon=True).start()
-        st.rerun()
-
-    if start_actualize:
-        st.session_state.run_log = []
-        st.session_state.run_action = "actualize"
-        proc = run_node_script(project_id, "actualize.js")
-        st.session_state.run_proc = proc
-        threading.Thread(target=stream_process_output, args=(proc, st.session_state.run_log), daemon=True).start()
-        st.rerun()
-
-    if stop_clicked and st.session_state.run_proc:
-        # Мягкая остановка через STOP-флаг — как делал app.js (публикация проверяет флаг между городами)
-        flag_name = ".STOP_FLAG" if st.session_state.get("run_action") == "publish" else ".STOP_FLAG_ACTUALIZE"
-        (project_base(project_id) / flag_name).write_text(str(int(time.time() * 1000)), encoding="utf-8")
-        st.info("Запрошена остановка — завершится после текущего города")
-
-    if st.session_state.run_proc:
-        st.code("".join(st.session_state.run_log[-200:]) or "Запуск...", language=None)
-        if st.session_state.run_proc.poll() is not None:
-            st.session_state.run_proc = None
-            st.rerun()
-        else:
-            time.sleep(2)
-            st.rerun()
-
-    # ── Запасной способ: без Node (нужен, если Node не установлен — например,
-    # в облаке). Нажал кнопку — публикация идёт в фоне, без окна браузера. ──
-    st.divider()
-    with st.expander("Запустить без Node (например, если это облако без Node.js)"):
-        tab_cloud_run(project_id)
+    tab_cloud_run(project_id)
 
 
 # ─── ВКЛАДКА: ОТЧЁТЫ И ЛОГИ ─────────────────────────────────────────
