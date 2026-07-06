@@ -549,6 +549,9 @@ def tab_cloud_run(project_id: str):
 
         if step == "idle":
             if st.button("Начать вход", key="yb-start"):
+                old_flow = st.session_state.get("yb_flow")
+                if old_flow is not None:
+                    worker.call(old_flow.close)
                 with st.spinner("Открываю браузер и захожу на страницу входа..."):
                     flow = yb.YbLoginFlow(project_id)
                     screenshot = worker.call(flow.start)

@@ -106,19 +106,27 @@ class YbLoginFlow:
 
     def start(self) -> bytes:
         _ensure_chromium_installed()
-        self._playwright = sync_playwright().start()
-        self.browser = self._playwright.chromium.launch(headless=True, args=[
-        "--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu",
-        "--disable-extensions", "--disable-background-networking",
-        "--disable-default-apps", "--disable-sync", "--no-first-run",
-        "--mute-audio", "--disable-backgrounding-occluded-windows",
-        "--single-process", "--no-zygote",
-    ])
-        self.context = self.browser.new_context(viewport={"width": 1280, "height": 900})
-        self.page = self.context.new_page()
-        self.page.goto(PASSPORT_URL, wait_until="domcontentloaded")
-        self.page.wait_for_timeout(1500)
-        return self.page.screenshot(full_page=True)
+        try:
+            self._playwright = sync_playwright().start()
+            self.browser = self._playwright.chromium.launch(headless=True, args=[
+                "--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu",
+                "--disable-extensions", "--disable-background-networking",
+                "--disable-default-apps", "--disable-sync", "--no-first-run",
+                "--mute-audio", "--disable-backgrounding-occluded-windows",
+                "--single-process", "--no-zygote",
+            ])
+            self.context = self.browser.new_context(viewport={"width": 1280, "height": 900})
+            self.page = self.context.new_page()
+            self.page.goto(PASSPORT_URL, wait_until="domcontentloaded")
+            self.page.wait_for_timeout(1500)
+            return self.page.screenshot(full_page=True)
+        except Exception:
+            # Если что-то упало на середине (например, браузер убило по памяти),
+            # обязательно останавливаем playwright — иначе следующий вызов start()
+            # в этом же фоновом потоке падает с "Sync API inside asyncio loop",
+            # потому что предыдущий (незакрытый) экземпляр уже владеет циклом событий.
+            self.close()
+            raise
 
     def submit_phone(self, phone: str) -> bytes:
         """
