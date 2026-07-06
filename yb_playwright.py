@@ -117,6 +117,13 @@ class YbLoginFlow:
             ])
             self.context = self.browser.new_context(viewport={"width": 1280, "height": 900})
             self.page = self.context.new_page()
+            # Диагностика: сначала лёгкая about:blank, чтобы понять, падает ли
+            # Chromium сам по себе (нехватка ресурсов) или именно на тяжёлой
+            # странице Яндекса. Если и это не проходит — дело в контейнере.
+            try:
+                self.page.goto("about:blank", timeout=10000)
+            except Exception as e:
+                raise RuntimeError(f"Chromium не пережил даже about:blank (ресурсы контейнера): {e}") from e
             self.page.goto(PASSPORT_URL, wait_until="domcontentloaded")
             self.page.wait_for_timeout(1500)
             # Яндекс по умолчанию открывает форму под телефон — переключаемся
