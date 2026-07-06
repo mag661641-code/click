@@ -561,15 +561,22 @@ def tab_yandex_login(project_id: str, config: dict):
                     worker.call(old_flow.close)
                 email = config.get("email", "")
                 password = config.get("password", "")
-                with st.spinner("Открываю браузер и вхожу автоматически по логину/паролю из настроек..."):
-                    flow = yb.YbLoginFlow(project_id)
-                    screenshot = worker.call(flow.start)
-                    logged_in = False
-                    if email:
-                        screenshot = worker.call(flow.submit_login, email)
-                        if password:
-                            screenshot = worker.call(flow.submit_password, password)
-                            logged_in = worker.call(flow.is_logged_in)
+                try:
+                    with st.spinner("Открываю браузер и вхожу автоматически по логину/паролю из настроек..."):
+                        flow = yb.YbLoginFlow(project_id)
+                        screenshot = worker.call(flow.start)
+                        logged_in = False
+                        if email:
+                            screenshot = worker.call(flow.submit_login, email)
+                            if password:
+                                screenshot = worker.call(flow.submit_password, password)
+                                logged_in = worker.call(flow.is_logged_in)
+                except Exception as e:  # noqa: BLE001
+                    # Streamlit прячет текст ошибки в своём собственном обработчике
+                    # ("original error message is redacted") — показываем сами,
+                    # иначе непонятно, что реально пошло не так (память, сеть и т.п.).
+                    st.error(f"Не удалось открыть браузер: {type(e).__name__}: {e}")
+                    return
                 if logged_in:
                     worker.call(flow.save_session)
                     worker.call(flow.close)
