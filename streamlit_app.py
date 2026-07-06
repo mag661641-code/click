@@ -476,7 +476,7 @@ def tab_actualize(project_id: str, config: dict):
 # каждому городу. Единственное, что требует участия человека один раз — вход
 # в Яндекс (см. вкладку «Настройки» / первый запуск ниже), потому что код из SMS
 # может ввести только человек — так устроен сам Яндекс, это не ограничение Click.
-def tab_run(project_id: str):
+def tab_run(project_id: str, config: dict):
     tasks = list_task_files(project_id)
     st.write(f"Задач в очереди: **{len(tasks)}**")
     if tasks:
@@ -488,7 +488,7 @@ def tab_run(project_id: str):
                 (project_base(project_id) / "tasks" / t).unlink(missing_ok=True)
             st.rerun()
 
-    tab_cloud_run(project_id)
+    tab_cloud_run(project_id, config)
 
 
 # ─── ВКЛАДКА: ОТЧЁТЫ И ЛОГИ ─────────────────────────────────────────
@@ -535,7 +535,7 @@ def tab_reports(project_id: str):
 # Нужен там, где нет Node.js (например, Streamlit Cloud). Вход — один раз,
 # через скриншот вместо окна браузера (браузер headless). После входа сессия
 # сохраняется, и публикация дальше идёт полностью в фоне, без скриншотов.
-def tab_cloud_run(project_id: str):
+def tab_cloud_run(project_id: str, config: dict):
     worker = get_playwright_worker("yb")
 
     if yb.has_saved_session(project_id):
@@ -552,13 +552,29 @@ def tab_cloud_run(project_id: str):
                 old_flow = st.session_state.get("yb_flow")
                 if old_flow is not None:
                     worker.call(old_flow.close)
-                with st.spinner("Открываю браузер и захожу на страницу входа..."):
+                email = config.get("email", "")
+                password = config.get("password", "")
+                with st.spinner("Открываю браузер и вхожу автоматически по логину/паролю из настроек..."):
                     flow = yb.YbLoginFlow(project_id)
                     screenshot = worker.call(flow.start)
-                st.session_state.yb_flow = flow
-                st.session_state.yb_screenshot = screenshot
-                st.session_state.yb_step = "first"
-                st.rerun()
+                    logged_in = False
+                    if email:
+                        screenshot = worker.call(flow.submit_login, email)
+                        if password:
+                            screenshot = worker.call(flow.submit_password, password)
+                            logged_in = worker.call(flow.is_logged_in)
+                if logged_in:
+                    worker.call(flow.save_session)
+                    worker.call(flow.close)
+                    st.success("Вход выполнен автоматически, сессия сохранена!")
+                    st.rerun()
+                else:
+                    # Автовход не хватило (нужен код/капча/подтверждение в приложении) —
+                    # дальше человек сам заполняет то, что осталось, по скриншоту.
+                    st.session_state.yb_flow = flow
+                    st.session_state.yb_screenshot = screenshot
+                    st.session_state.yb_step = "next" if email and password else "first"
+                    st.rerun()
 
         elif step == "first":
             st.image(st.session_state.yb_screenshot, caption="Посмотрите, что просит страница, и заполните нужное поле")
@@ -713,7 +729,7 @@ def show_main(project_id: str):
     with tab2:
         tab_actualize(project_id, config)
     with tab3:
-        tab_run(project_id)
+        tab_run(project_id, config)
     with tab4:
         tab_reports(project_id)
     with tab5:
