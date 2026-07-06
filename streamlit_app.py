@@ -558,6 +558,12 @@ def tab_run(project_id: str):
             time.sleep(2)
             st.rerun()
 
+    # ── Запасной способ: без Node (нужен, если Node не установлен — например,
+    # в облаке). Нажал кнопку — публикация идёт в фоне, без окна браузера. ──
+    st.divider()
+    with st.expander("Запустить без Node (например, если это облако без Node.js)"):
+        tab_cloud_run(project_id)
+
 
 # ─── ВКЛАДКА: ОТЧЁТЫ И ЛОГИ ─────────────────────────────────────────
 def tab_reports(project_id: str):
@@ -599,19 +605,11 @@ def tab_reports(project_id: str):
             st.text(log_file.read_text(encoding="utf-8", errors="replace")[-5000:])
 
 
-# ─── ВКЛАДКА: ОБЛАКО (публикация без Node/Puppeteer, через Playwright) ──
-# Работает там, где нет Node.js/Puppeteer (например, Streamlit Cloud). Вход —
-# один раз, через скриншот вместо окна браузера (браузер headless). После входа
-# сессия сохраняется, и публикация дальше идёт полностью в фоне, без скриншотов.
-def tab_cloud(project_id: str, config: dict):
-    st.caption(
-        "Этой вкладки не было в старом приложении — она нужна, чтобы публикация и "
-        "актуализация работали даже когда программа открыта только в браузере "
-        "(например, со Streamlit Cloud, без запущенного Click на компьютере). "
-        "Вкладки «Запуск»/«Публикация»/«Актуализация» по-прежнему работают как раньше "
-        "и никуда не делись — это просто ещё один, независимый способ сделать то же самое."
-    )
-
+# ─── БЛОК ВНУТРИ «ЗАПУСК»: без Node/Puppeteer, через Playwright ──────
+# Нужен там, где нет Node.js (например, Streamlit Cloud). Вход — один раз,
+# через скриншот вместо окна браузера (браузер headless). После входа сессия
+# сохраняется, и публикация дальше идёт полностью в фоне, без скриншотов.
+def tab_cloud_run(project_id: str):
     worker = get_playwright_worker("yb")
 
     if yb.has_saved_session(project_id):
@@ -778,8 +776,8 @@ def show_main(project_id: str):
 
     config = load_config(project_id)
 
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
-        ["Публикация", "Актуализация", "Запуск", "Публикация без программы", "Отчёт", "Настройки"]
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(
+        ["Публикация", "Актуализация", "Запуск", "Отчёт", "Настройки"]
     )
     with tab1:
         tab_compose(project_id, config)
@@ -788,10 +786,8 @@ def show_main(project_id: str):
     with tab3:
         tab_run(project_id)
     with tab4:
-        tab_cloud(project_id, config)
-    with tab5:
         tab_reports(project_id)
-    with tab6:
+    with tab5:
         tab_settings(project_id, config)
 
 
