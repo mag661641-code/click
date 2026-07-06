@@ -251,6 +251,17 @@ class YbLoginFlow:
         return self.page.screenshot(full_page=True)
 
     def is_logged_in(self) -> bool:
+        """
+        ВАЖНО: если на странице всё ещё виден незавершённый шаг проверки
+        (поле кода/логина/пароля, кнопка подтверждения кода) — НЕ переходим
+        на /profile. Сам переход туда, судя по всему, обнуляет непройденную
+        проверку кода с почты и откатывает весь вход на самый первый экран
+        (наблюдалось на ИМП: после пароля код внезапно попадал в поле email).
+        """
+        if self.page.locator(EMAIL_CODE_NEXT_BUTTON).count() > 0:
+            return False
+        if self.page.locator(GENERIC_TEXT_FIELD).count() > 0:
+            return False
         self.page.goto("https://passport.yandex.ru/profile", wait_until="domcontentloaded")
         self.page.wait_for_timeout(1000)
         url = self.page.url
