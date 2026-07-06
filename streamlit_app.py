@@ -59,7 +59,7 @@ def _hash(password: str) -> str:
 PROJECTS = {
     "SMU": {
         "name": "СМУ", "fullName": "Стальметгрупп", "color": "#3b82f6", "icon": "🏗",
-        "passwordHash": _hash("1501"), "presetCities": None, "endings": None,
+        "passwordHash": _hash("1501"), "presetCities": pd.SMU_CITIES, "endings": None,
     },
     "IMP": {
         "name": "ИМП", "fullName": "Инметпром", "color": "#10b981", "icon": "🔩",
