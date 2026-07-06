@@ -43,7 +43,7 @@ def _ensure_chromium_installed():
         return
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
+            browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"])
             browser.close()
     except Exception:
         subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=False)
@@ -101,7 +101,7 @@ class YbLoginFlow:
     def start(self) -> bytes:
         _ensure_chromium_installed()
         self._playwright = sync_playwright().start()
-        self.browser = self._playwright.chromium.launch(headless=True)
+        self.browser = self._playwright.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"])
         self.context = self.browser.new_context(viewport={"width": 1280, "height": 900})
         self.page = self.context.new_page()
         self.page.goto(PASSPORT_URL, wait_until="domcontentloaded")
@@ -210,7 +210,7 @@ def publish_to_city(project_id: str, city_url: str, text: str) -> dict:
 
     _ensure_chromium_installed()
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"])
         context = browser.new_context(storage_state=str(path), viewport={"width": 1280, "height": 900})
         page = context.new_page()
         try:
@@ -270,7 +270,7 @@ def actualize_city(project_id: str, company_url: str) -> dict:
         return {"ok": False, "error": "Не удалось определить URL раздела «Данные»"}
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"])
         context = browser.new_context(storage_state=str(path), viewport={"width": 1280, "height": 900})
         page = context.new_page()
         try:
