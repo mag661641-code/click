@@ -150,16 +150,21 @@ class YbLoginFlow:
             raise
 
     def _dismiss_cookie_banner(self):
-        if not _click_exact_button(self.page, ["allow all", "принять все", "accept all", "разрешить все"]):
-            # Некоторые варианты баннера — не <button>, а div/span с ролью banner;
-            # запасной путь — по видимому тексту через get_by_text.
+        """
+        Баннер согласия на cookie нередко рендерится внутри iframe — обычный
+        поиск в self.page (только главный документ) его не находит. Проверяем
+        главную страницу и все вложенные фреймы.
+        """
+        pattern = re.compile(r"^(allow all|принять все|accept all|разрешить все)$", re.IGNORECASE)
+        for frame in self.page.frames:  # includes the main frame
             try:
-                btn = self.page.get_by_text(re.compile(r"^(allow all|принять все|accept all)$", re.IGNORECASE))
+                btn = frame.get_by_text(pattern, exact=True)
                 if btn.count() > 0:
-                    btn.first.click()
+                    btn.first.click(timeout=2000)
+                    self.page.wait_for_timeout(400)
+                    return
             except Exception:
-                pass
-        self.page.wait_for_timeout(400)
+                continue
 
     def _switch_to_login_by_password(self):
         if self.page.locator(OTHER_METHOD_BUTTON).count() > 0:
