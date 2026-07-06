@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -115,7 +116,14 @@ class YbLoginFlow:
                 "--disable-default-apps", "--disable-sync", "--no-first-run",
                 "--mute-audio", "--disable-backgrounding-occluded-windows",
             ])
-            self.context = self.browser.new_context(viewport={"width": 1280, "height": 900})
+            self.context = self.browser.new_context(viewport={"width": 1000, "height": 700})
+            # about:blank прошёл нормально, а реальная страница валила браузер —
+            # похоже на нехватку памяти при рендеринге тяжёлой SPA. Режем всё,
+            # что не нужно для формы входа: картинки, шрифты, видео, стили.
+            self.context.route(
+                re.compile(r".*\.(png|jpe?g|gif|webp|svg|woff2?|ttf|mp4|webm|css)(\?.*)?$", re.IGNORECASE),
+                lambda route: route.abort(),
+            )
             self.page = self.context.new_page()
             # Диагностика: сначала лёгкая about:blank, чтобы понять, падает ли
             # Chromium сам по себе (нехватка ресурсов) или именно на тяжёлой
@@ -295,9 +303,6 @@ def publish_to_city(project_id: str, city_url: str, text: str) -> dict:
             return {"ok": False, "error": str(e)}
         finally:
             browser.close()
-
-
-import re
 
 
 def _build_edit_url(company_url: str) -> str | None:
