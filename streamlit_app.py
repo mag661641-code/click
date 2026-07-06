@@ -629,19 +629,27 @@ def tab_yandex_login(project_id: str, config: dict):
 
             flow: yb.YbLoginFlow = st.session_state.yb_flow
             screenshot = None
-            if password_clicked and password:
-                with st.spinner("Проверяю пароль..."):
-                    screenshot = worker.call(flow.submit_password, password)
-            elif code_clicked and code:
-                with st.spinner("Проверяю код..."):
-                    screenshot = worker.call(flow.submit_code, code)
-            elif confirmed_elsewhere:
-                screenshot = st.session_state.yb_screenshot
+            try:
+                if password_clicked and password:
+                    with st.spinner("Проверяю пароль..."):
+                        screenshot = worker.call(flow.submit_password, password)
+                elif code_clicked and code:
+                    with st.spinner("Проверяю код..."):
+                        screenshot = worker.call(flow.submit_code, code)
+                elif confirmed_elsewhere:
+                    screenshot = st.session_state.yb_screenshot
+            except Exception as e:  # noqa: BLE001
+                st.error(f"Ошибка: {type(e).__name__}: {e}")
+                return
 
             if screenshot is not None:
                 st.session_state.yb_screenshot = screenshot
-                with st.spinner("Проверяю, выполнен ли вход..."):
-                    logged_in = worker.call(flow.is_logged_in)
+                try:
+                    with st.spinner("Проверяю, выполнен ли вход..."):
+                        logged_in = worker.call(flow.is_logged_in)
+                except Exception as e:  # noqa: BLE001
+                    st.error(f"Ошибка: {type(e).__name__}: {e}")
+                    return
                 if logged_in:
                     worker.call(flow.save_session)
                     worker.call(flow.close)

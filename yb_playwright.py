@@ -207,21 +207,27 @@ class YbLoginFlow:
     def _submit_generic_field(self, value: str, next_button_selector: str):
         """
         Заполняет общее поле (логин/пароль/код) и максимально надёжно жмёт
-        «дальше»: сначала Enter прямо в поле (так делает обычный человек и это
-        не зависит от конкретного test-id), затем — если экран не сдвинулся —
-        пробуем сначала точный test-id кнопки, затем клик по видимому тексту
-        (Next/Continue/Войти/Продолжить/Далее), т.к. test-id иногда отличается
-        в зависимости от варианта экрана (например, когда email уже знаком
-        Яндексу и появляются иконки соцсетей).
+        «дальше». ВАЖНО: печатаем посимвольно (.type()), а не .fill() —
+        кнопка «Next» у Яндекса остаётся серой/неактивной, пока не увидит
+        настоящие keydown-события (та же история, что и с маской телефона).
+        Дальше: Enter прямо в поле, затем — если экран не сдвинулся — точный
+        test-id кнопки, затем клик по видимому тексту (Next/Continue/Войти/
+        Продолжить/Далее), т.к. test-id иногда отличается в зависимости от
+        варианта экрана (например, когда email уже знаком Яндексу).
         """
         field = self.page.locator(GENERIC_TEXT_FIELD).first
         field.click()
-        field.fill(value)
+        field.fill("")
+        field.type(value, delay=40)
         self._dismiss_cookie_banner()
+        self.page.wait_for_timeout(400)
         field.press("Enter")
         self.page.wait_for_timeout(1200)
         if self.page.locator(next_button_selector).count() > 0:
-            self.page.click(next_button_selector)
+            try:
+                self.page.click(next_button_selector, timeout=3000)
+            except Exception:
+                pass
             self.page.wait_for_timeout(1200)
         _click_exact_button(self.page, ["next", "continue", "войти", "продолжить", "далее"])
         self.page.wait_for_timeout(1500)
