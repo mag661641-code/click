@@ -688,7 +688,7 @@ def tab_cloud_run(project_id: str):
                 data = json.loads((tasks_dir / task_file).read_text(encoding="utf-8"))
                 for city_task in data.get("tasks", []):
                     status.text(f"Публикую: {city_task['cityName']}...")
-                    result = worker.call(yb.publish_to_city, project_id, city_task["companyUrl"], city_task["postText"])
+                    result = worker.call(yb.publish_to_city, project_id, city_task["companyUrl"], city_task["postText"], city_task.get("imagePath"))
                     results.append((city_task["cityName"], result))
                 (tasks_dir / task_file).rename(done_dir / task_file)
                 progress.progress((i + 1) / len(tasks))

@@ -308,14 +308,14 @@ def has_saved_session(project_id: str) -> bool:
         return False
 
 
-def publish_to_city(project_id: str, city_url: str, text: str) -> dict:
+def publish_to_city(project_id: str, city_url: str, text: str, image_path: str | None = None) -> dict:
     """
     Публикует пост на карточке города, используя сохранённую сессию. Полностью
     headless, без скриншотов и без участия человека — как и просили: "либо скриншот
     для входа, либо фоново просто публикует".
 
-    Логика (кнопка «Добавить пост» → поле текста → кнопка «Создать») перенесена
-    из publish.js — тех же самых, уже проверенных вживую, селекторов/паттернов.
+    Логика (кнопка «Добавить пост» → картинка → поле текста → кнопка «Создать»)
+    перенесена из publish.js — тех же самых, уже проверенных вживую, селекторов.
     """
     path = session_path(project_id)
     if not path.exists():
@@ -335,6 +335,10 @@ def publish_to_city(project_id: str, city_url: str, text: str) -> dict:
                 return {"ok": False, "error": "Кнопка «Добавить пост» не найдена"}
             page.wait_for_timeout(1000)
 
+            image_warning = None
+            if image_path and Path(image_path).exists():
+                image_warning = _upload_post_image(page, image_path)
+
             # Поле текста — тот же селектор, что в publish.js.
             text_field = page.locator('[contenteditable="true"], textarea[name*="text"], textarea[placeholder*="екст"], textarea').first
             text_field.click()
@@ -349,11 +353,53 @@ def publish_to_city(project_id: str, city_url: str, text: str) -> dict:
             page.wait_for_timeout(2500)
 
             context.storage_state(path=str(path))
-            return {"ok": True, "status": "Опубликовано"}
+            status = "Опубликовано" + (f" ({image_warning})" if image_warning else "")
+            return {"ok": True, "status": status}
         except Exception as e:  # noqa: BLE001
             return {"ok": False, "error": str(e)}
         finally:
             browser.close()
+
+
+def _upload_post_image(page: Page, image_path: str) -> str | None:
+    """
+    Загружает картинку в форму поста — перенос логики из publish.js: сначала
+    ищем готовый input[type=file], если нет — жмём кнопку "прикрепить/добавить
+    фото/загрузить", затем ждём появления превью (CDN get-sprav-posts).
+    Возвращает текст предупреждения, если что-то пошло не так (не критично —
+    публикуем без картинки), либо None если всё ок.
+    """
+    try:
+        file_input = page.locator('input[type="file"]').first
+        if file_input.count() == 0:
+            if not _click_exact_button(page, ["прикрепить", "добавить фото", "добавить картинку", "добавить изображение", "загрузить"]):
+                return "картинка не прикреплена: кнопка загрузки не найдена"
+            page.wait_for_timeout(400)
+            file_input = page.locator('input[type="file"]').first
+            if file_input.count() == 0:
+                return "картинка не прикреплена: поле загрузки не найдено"
+
+        file_input.set_input_files(image_path)
+
+        try:
+            page.wait_for_function(
+                """() => {
+                    const all = document.querySelectorAll('img[src*="get-sprav-posts"], [style*="get-sprav-posts"]');
+                    for (const el of all) {
+                        const r = el.getBoundingClientRect();
+                        if (r.width >= 100 && r.height >= 100) return true;
+                    }
+                    return false;
+                }""",
+                timeout=8000,
+            )
+        except Exception:
+            return "превью картинки не появилось за 8 секунд"
+
+        page.wait_for_timeout(1000)
+        return None
+    except Exception as e:  # noqa: BLE001
+        return f"ошибка загрузки картинки: {e}"
 
 
 def _build_edit_url(company_url: str) -> str | None:
