@@ -204,28 +204,34 @@ class YbLoginFlow:
         self.page.wait_for_timeout(2500)
         return self.page.screenshot(full_page=True)
 
-    def submit_login(self, login_value: str) -> bytes:
+    def _submit_generic_field(self, value: str, next_button_selector: str):
+        """
+        Заполняет общее поле (логин/пароль/код) и максимально надёжно жмёт
+        «дальше»: сначала Enter прямо в поле (так делает обычный человек и это
+        не зависит от конкретного test-id), затем — если экран не сдвинулся —
+        пробуем сначала точный test-id кнопки, затем клик по видимому тексту
+        (Next/Continue/Войти/Продолжить/Далее), т.к. test-id иногда отличается
+        в зависимости от варианта экрана (например, когда email уже знаком
+        Яндексу и появляются иконки соцсетей).
+        """
         field = self.page.locator(GENERIC_TEXT_FIELD).first
         field.click()
-        field.fill(login_value)
+        field.fill(value)
         self._dismiss_cookie_banner()
-        if self.page.locator(LOGIN_NEXT_BUTTON).count() > 0:
-            self.page.click(LOGIN_NEXT_BUTTON)
-        else:
-            self.page.keyboard.press("Enter")
-        self.page.wait_for_timeout(2500)
+        field.press("Enter")
+        self.page.wait_for_timeout(1200)
+        if self.page.locator(next_button_selector).count() > 0:
+            self.page.click(next_button_selector)
+            self.page.wait_for_timeout(1200)
+        _click_exact_button(self.page, ["next", "continue", "войти", "продолжить", "далее"])
+        self.page.wait_for_timeout(1500)
+
+    def submit_login(self, login_value: str) -> bytes:
+        self._submit_generic_field(login_value, LOGIN_NEXT_BUTTON)
         return self.page.screenshot(full_page=True)
 
     def submit_password(self, password: str) -> bytes:
-        field = self.page.locator(GENERIC_TEXT_FIELD).first
-        field.click()
-        field.fill(password)
-        self._dismiss_cookie_banner()
-        if self.page.locator(PASSWORD_NEXT_BUTTON).count() > 0:
-            self.page.click(PASSWORD_NEXT_BUTTON)
-        else:
-            self.page.keyboard.press("Enter")
-        self.page.wait_for_timeout(2500)
+        self._submit_generic_field(password, PASSWORD_NEXT_BUTTON)
         self._skip_post_login_prompts()
         return self.page.screenshot(full_page=True)
 
@@ -235,15 +241,7 @@ class YbLoginFlow:
         playwright codegen на реальном СМУ-аккаунте) — то же общее поле, что
         и у логина/пароля, плюс отдельная кнопка подтверждения.
         """
-        field = self.page.locator(GENERIC_TEXT_FIELD).first
-        field.click()
-        field.fill(code)
-        self._dismiss_cookie_banner()
-        if self.page.locator(EMAIL_CODE_NEXT_BUTTON).count() > 0:
-            self.page.click(EMAIL_CODE_NEXT_BUTTON)
-        else:
-            self.page.keyboard.press("Enter")
-        self.page.wait_for_timeout(2500)
+        self._submit_generic_field(code, EMAIL_CODE_NEXT_BUTTON)
         self._skip_post_login_prompts()
         return self.page.screenshot(full_page=True)
 
