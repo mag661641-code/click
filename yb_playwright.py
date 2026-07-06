@@ -116,14 +116,11 @@ class YbLoginFlow:
             self._playwright = sync_playwright().start()
             self.browser = _launch_browser(self._playwright)
             self.context = self.browser.new_context(viewport={"width": 1000, "height": 700})
-            # about:blank прошёл нормально, а реальная страница валила браузер —
-            # похоже на нехватку памяти при рендеринге тяжёлой SPA. Режем самое
-            # тяжёлое (картинки/шрифты/видео), но НЕ css — иначе скриншот для
-            # ручного шага (код/капча) станет нечитаемым.
-            self.context.route(
-                re.compile(r".*\.(png|jpe?g|gif|webp|svg|woff2?|ttf|mp4|webm)(\?.*)?$", re.IGNORECASE),
-                lambda route: route.abort(),
-            )
+            # ПРИМЕЧАНИЕ: раньше здесь блокировались картинки/шрифты для экономии
+            # памяти (когда падал Chromium из-за OOM). Убрали после перехода на
+            # Firefox — блокировка резко ломала реальный вход (Next не проходил
+            # проверку и откатывал на первый экран), похоже на анти-фрод/капчу,
+            # которой нужен какой-то из этих ресурсов.
             self.page = self.context.new_page()
             # Диагностика: сначала лёгкая about:blank, чтобы понять, падает ли
             # Chromium сам по себе (нехватка ресурсов) или именно на тяжёлой

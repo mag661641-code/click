@@ -559,36 +559,23 @@ def tab_yandex_login(project_id: str, config: dict):
                 old_flow = st.session_state.get("yb_flow")
                 if old_flow is not None:
                     worker.call(old_flow.close)
-                email = config.get("email", "")
-                password = config.get("password", "")
                 try:
-                    with st.spinner("Открываю браузер и вхожу автоматически по логину/паролю из настроек..."):
+                    with st.spinner("Открываю браузер..."):
                         flow = yb.YbLoginFlow(project_id)
                         screenshot = worker.call(flow.start)
-                        logged_in = False
-                        if email:
-                            screenshot = worker.call(flow.submit_login, email)
-                            if password:
-                                screenshot = worker.call(flow.submit_password, password)
-                                logged_in = worker.call(flow.is_logged_in)
                 except Exception as e:  # noqa: BLE001
                     # Streamlit прячет текст ошибки в своём собственном обработчике
                     # ("original error message is redacted") — показываем сами,
                     # иначе непонятно, что реально пошло не так (память, сеть и т.п.).
                     st.error(f"Не удалось открыть браузер: {type(e).__name__}: {e}")
                     return
-                if logged_in:
-                    worker.call(flow.save_session)
-                    worker.call(flow.close)
-                    st.success("Вход выполнен автоматически, сессия сохранена!")
-                    st.rerun()
-                else:
-                    # Автовход не хватило (нужен код/капча/подтверждение в приложении) —
-                    # дальше человек сам заполняет то, что осталось, по скриншоту.
-                    st.session_state.yb_flow = flow
-                    st.session_state.yb_screenshot = screenshot
-                    st.session_state.yb_step = "next" if email and password else "first"
-                    st.rerun()
+                # Полностью ручной ввод по скриншоту на каждом шаге — без попыток
+                # авто-логина: они несколько раз ломали реальный вход Яндекса
+                # (откатывало на первый экран), а руками получалось стабильно.
+                st.session_state.yb_flow = flow
+                st.session_state.yb_screenshot = screenshot
+                st.session_state.yb_step = "first"
+                st.rerun()
 
         elif step == "first":
             st.image(st.session_state.yb_screenshot, caption="Посмотрите, что просит страница, и заполните нужное поле")
