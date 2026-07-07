@@ -271,7 +271,7 @@ def list_task_files(project_id: str) -> list[str]:
 
 # ─── ЗАДАЧИ АКТУАЛИЗАЦИИ (формат actualize.js — без текста/картинок и без
 # credentials: actualize.js использует уже сохранённую сессию из publish.js --login) ──
-def save_actualize_tasks(project_id: str, config: dict, country_id: str, city_ids: list[str]) -> int:
+def save_actualize_tasks(project_id: str, config: dict, country_id: str, city_ids: list[str], clear_first: bool = True) -> int:
     country = next((c for c in config["countries"] if c["id"] == country_id), None)
     if not country:
         return 0
@@ -287,8 +287,11 @@ def save_actualize_tasks(project_id: str, config: dict, country_id: str, city_id
     tasks_dir.mkdir(parents=True, exist_ok=True)
     # actualize.js читает ВСЮ папку tasks-actualize/ разом — очищаем старые файлы
     # перед сохранением новой пачки, как делал app.js (/api/actualize/save).
-    for old in tasks_dir.glob("*.json"):
-        old.unlink()
+    # При сохранении нескольких стран подряд очищаем только перед ПЕРВОЙ —
+    # иначе каждая следующая страна стирала бы файлы предыдущей.
+    if clear_first:
+        for old in tasks_dir.glob("*.json"):
+            old.unlink()
     ts = int(time.time() * 1000)
     name = f"01-{safe_filename(country['name'])}-{ts}.json"
     (tasks_dir / name).write_text(json.dumps(item, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -499,18 +502,31 @@ def tab_actualize(project_id: str, config: dict):
 
     st.caption("Актуализация — отдельный процесс: проверяет каждую карточку и жмёт «Данные актуальны», если кнопка появилась. Не публикует посты.")
 
-    country_names = [c["name"] for c in config["countries"]]
-    selected_country_name = st.selectbox("Страна", country_names, key="actualize-country")
-    country = next(c for c in config["countries"] if c["name"] == selected_country_name)
+    selected_countries = country_checkboxes("actualize", config)
 
-    selected_city_ids = city_multiselect("actualize", country)
+    if not selected_countries:
+        st.info("Выберите хотя бы одну страну")
+        return
+
+    per_country = {}
+    for country in selected_countries:
+        with st.expander(f"🌍 {country['name']}", expanded=True):
+            selected_city_ids = city_multiselect(f"actualize-{country['id']}", country)
+            per_country[country["id"]] = selected_city_ids
 
     if st.button("Сохранить задачи актуализации", type="primary"):
-        if not selected_city_ids:
-            st.error("Выберите хотя бы один город")
+        total = 0
+        clear_first = True
+        for country in selected_countries:
+            city_ids = per_country[country["id"]]
+            if not city_ids:
+                continue
+            total += save_actualize_tasks(project_id, config, country["id"], city_ids, clear_first=clear_first)
+            clear_first = False
+        if total == 0:
+            st.error("Выберите хотя бы один город в одной из выбранных стран")
         else:
-            count = save_actualize_tasks(project_id, config, country["id"], selected_city_ids)
-            st.success(f"Сохранено {count} городов — теперь можно запустить на вкладке «Запуск»")
+            st.success(f"Сохранено {total} городов — теперь можно запустить на вкладке «Запуск»")
 
     existing = list_actualize_task_files(project_id)
     if existing:
