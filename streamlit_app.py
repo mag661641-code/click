@@ -406,30 +406,26 @@ def city_multiselect(key_prefix: str, country: dict) -> list[str]:
 # чтобы можно было выбрать сразу несколько стран.
 def country_checkboxes(key_prefix: str, config: dict) -> list[dict]:
     countries = config["countries"]
-    state_key = f"{key_prefix}-selected-countries"
-    if state_key not in st.session_state:
-        st.session_state[state_key] = {}
-    for c in countries:
-        st.session_state[state_key].setdefault(c["id"], False)
+
+    def cb_key(country_id: str) -> str:
+        return f"{key_prefix}-country-cb-{country_id}"
 
     col1, col2 = st.columns(2)
     with col1:
         if st.button("Выбрать все страны", key=f"{key_prefix}-select-all-countries"):
             for c in countries:
-                st.session_state[state_key][c["id"]] = True
+                st.session_state[cb_key(c["id"])] = True
     with col2:
         if st.button("Снять все страны", key=f"{key_prefix}-deselect-all-countries"):
             for c in countries:
-                st.session_state[state_key][c["id"]] = False
+                st.session_state[cb_key(c["id"])] = False
 
     cols = st.columns(3)
     for i, c in enumerate(countries):
         with cols[i % 3]:
-            st.session_state[state_key][c["id"]] = st.checkbox(
-                c["name"], value=st.session_state[state_key][c["id"]], key=f"{key_prefix}-country-cb-{c['id']}",
-            )
+            st.checkbox(c["name"], key=cb_key(c["id"]))
 
-    return [c for c in countries if st.session_state[state_key][c["id"]]]
+    return [c for c in countries if st.session_state.get(cb_key(c["id"]), False)]
 
 
 # ─── ВКЛАДКА: НОВЫЙ ПОСТ ────────────────────────────────────────────
