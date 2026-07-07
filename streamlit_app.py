@@ -377,15 +377,24 @@ def country_checkboxes(key_prefix: str, config: dict) -> list[dict]:
     def cb_key(country_id: str) -> str:
         return f"{key_prefix}-country-cb-{country_id}"
 
+    def cities_key(country_id: str) -> str:
+        # Тот же ключ, что использует city_multiselect (вызывается с
+        # key_prefix=f"{key_prefix}-{country_id}") — чтобы «Выбрать все
+        # страны» сразу проставлял и все города, без отдельного клика
+        # «Выбрать все города» в каждой раскрытой стране.
+        return f"{key_prefix}-{country_id}-cities-{country_id}"
+
     col1, col2 = st.columns(2)
     with col1:
         if st.button("Выбрать все страны", key=f"{key_prefix}-select-all-countries"):
             for c in countries:
                 st.session_state[cb_key(c["id"])] = True
+                st.session_state[cities_key(c["id"])] = [city["id"] for city in c["cities"]]
     with col2:
         if st.button("Снять все страны", key=f"{key_prefix}-deselect-all-countries"):
             for c in countries:
                 st.session_state[cb_key(c["id"])] = False
+                st.session_state[cities_key(c["id"])] = []
 
     cols = st.columns(3)
     for i, c in enumerate(countries):
