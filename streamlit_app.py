@@ -269,42 +269,6 @@ def list_task_files(project_id: str) -> list[str]:
     return sorted(f.name for f in tasks_dir.glob("*.json"))
 
 
-# ─── ЗАДАЧИ АКТУАЛИЗАЦИИ (формат actualize.js — без текста/картинок и без
-# credentials: actualize.js использует уже сохранённую сессию из publish.js --login) ──
-def save_actualize_tasks(project_id: str, config: dict, country_id: str, city_ids: list[str], clear_first: bool = True) -> int:
-    country = next((c for c in config["countries"] if c["id"] == country_id), None)
-    if not country:
-        return 0
-    tasks = [
-        {"cityName": city["name"], "companyUrl": city["url"]}
-        for city in country["cities"] if city["id"] in city_ids
-    ]
-    if not tasks:
-        return 0
-    item = {"country": country["name"], "tasks": tasks}
-
-    tasks_dir = project_base(project_id) / "tasks-actualize"
-    tasks_dir.mkdir(parents=True, exist_ok=True)
-    # actualize.js читает ВСЮ папку tasks-actualize/ разом — очищаем старые файлы
-    # перед сохранением новой пачки, как делал app.js (/api/actualize/save).
-    # При сохранении нескольких стран подряд очищаем только перед ПЕРВОЙ —
-    # иначе каждая следующая страна стирала бы файлы предыдущей.
-    if clear_first:
-        for old in tasks_dir.glob("*.json"):
-            old.unlink()
-    ts = int(time.time() * 1000)
-    name = f"01-{safe_filename(country['name'])}-{ts}.json"
-    (tasks_dir / name).write_text(json.dumps(item, ensure_ascii=False, indent=2), encoding="utf-8")
-    return len(tasks)
-
-
-def list_actualize_task_files(project_id: str) -> list[str]:
-    tasks_dir = project_base(project_id) / "tasks-actualize"
-    if not tasks_dir.exists():
-        return []
-    return sorted(f.name for f in tasks_dir.glob("*.json"))
-
-
 # ─── ЭКРАН ЛОГИНА ───────────────────────────────────────────────────
 def show_login():
     st.title("📮 Click")
@@ -500,7 +464,11 @@ def tab_actualize(project_id: str, config: dict):
         st.info("Сначала добавьте страны и города во вкладке «Настройки»")
         return
 
-    st.caption("Актуализация — отдельный процесс: проверяет каждую карточку и жмёт «Данные актуальны», если кнопка появилась. Не публикует посты.")
+    st.caption(
+        "Скрипт зайдёт в раздел «Данные» каждого города и нажмёт «Данные актуальны», если она "
+        "там есть. Кнопка появляется на странице периодически — Яндекс просит подтверждать, "
+        "что данные не изменились. Если кнопки нет — актуализация не требуется."
+    )
 
     selected_countries = country_checkboxes("actualize", config)
 
@@ -510,27 +478,58 @@ def tab_actualize(project_id: str, config: dict):
 
     per_country = {}
     for country in selected_countries:
-        with st.expander(f"🌍 {country['name']}", expanded=True):
-            selected_city_ids = city_multiselect(f"actualize-{country['id']}", country)
-            per_country[country["id"]] = selected_city_ids
+        selected_city_ids = city_multiselect(f"actualize-{country['id']}", country)
+        per_country[country["id"]] = selected_city_ids
+        with st.expander(f"{country['name']} — выбрано {len(selected_city_ids)} из {len(country['cities'])}"):
+            for city in country["cities"]:
+                mark = "✓" if city["id"] in selected_city_ids else "—"
+                st.caption(f"{mark} {city['name']}")
 
-    if st.button("Сохранить задачи актуализации", type="primary"):
-        total = 0
-        clear_first = True
-        for country in selected_countries:
-            city_ids = per_country[country["id"]]
-            if not city_ids:
-                continue
-            total += save_actualize_tasks(project_id, config, country["id"], city_ids, clear_first=clear_first)
-            clear_first = False
-        if total == 0:
-            st.error("Выберите хотя бы один город в одной из выбранных стран")
-        else:
-            st.success(f"Сохранено {total} городов — теперь можно запустить на вкладке «Запуск»")
+    all_selected_cities = [
+        city
+        for country in selected_countries
+        for city in country["cities"]
+        if city["id"] in per_country[country["id"]]
+    ]
+    total = len(all_selected_cities)
+    st.write(f"Выбрано: **{total}** городов")
 
-    existing = list_actualize_task_files(project_id)
-    if existing:
-        st.caption(f"Сейчас сохранено файлов задач актуализации: {len(existing)}")
+    if not yb.has_saved_session(project_id):
+        st.warning("Сначала войдите в Яндекс на вкладке «Настройки» — без этого актуализацию не запустить.")
+        return
+
+    if st.button(f"🔄 Запустить актуализацию ({total} городов)", type="primary", disabled=total == 0):
+        worker = get_playwright_worker("yb")
+        start_time = time.time()
+        results = []
+        progress = st.progress(0.0)
+        status = st.empty()
+        for i, city in enumerate(all_selected_cities):
+            status.text(f"Проверяю: {city['name']}...")
+            result = worker.call(yb.actualize_city, project_id, city["url"])
+            results.append((city["name"], result))
+            progress.progress((i + 1) / total)
+        status.empty()
+        elapsed_min = (time.time() - start_time) / 60
+
+        actualized = sum(1 for _, r in results if r.get("ok") and r.get("status") == "actualized")
+        not_needed = sum(1 for _, r in results if r.get("ok") and r.get("status") != "actualized")
+        errors = sum(1 for _, r in results if not r.get("ok"))
+
+        st.subheader("Отчёт актуализации")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Актуализировано", actualized)
+        c2.metric("Не требовалось", not_needed)
+        c3.metric("Ошибок", errors)
+        c4.metric("Время", f"{elapsed_min:.1f} мин")
+
+        with st.expander(f"Показать детали ({len(results)} городов)"):
+            for city_name, result in results:
+                if result.get("ok"):
+                    label = "актуализировано" if result.get("status") == "actualized" else "уже актуально"
+                    st.success(f"✅ {city_name}: {label}")
+                else:
+                    st.error(f"❌ {city_name}: {result.get('error')}")
 
 
 # ─── ВКЛАДКА: ЗАПУСК ────────────────────────────────────────────────
@@ -760,38 +759,6 @@ def tab_cloud_run(project_id: str):
                     st.success(f"✅ {city_name}: {result.get('status')}")
                 else:
                     st.error(f"❌ {city_name}: {result.get('error')}")
-
-    st.divider()
-    st.subheader("Актуализация в фоне")
-
-    actualize_tasks = list_actualize_task_files(project_id)
-    if not actualize_tasks:
-        st.info("Очередь актуализации пуста — сначала сохраните на вкладке «Актуализация».")
-    else:
-        st.write(f"Задач актуализации в очереди: **{len(actualize_tasks)}**")
-        if st.button("☁️ Актуализировать в фоне (без Node)", key="yb-actualize"):
-            results = []
-            progress = st.progress(0.0)
-            status = st.empty()
-            tasks_dir = project_base(project_id) / "tasks-actualize"
-
-            for i, task_file in enumerate(actualize_tasks):
-                data = json.loads((tasks_dir / task_file).read_text(encoding="utf-8"))
-                for city_task in data.get("tasks", []):
-                    status.text(f"Проверяю: {city_task['cityName']}...")
-                    result = worker.call(yb.actualize_city, project_id, city_task["companyUrl"])
-                    results.append((city_task["cityName"], result))
-                (tasks_dir / task_file).unlink()
-                progress.progress((i + 1) / len(actualize_tasks))
-
-            status.empty()
-            for city_name, result in results:
-                if result.get("ok"):
-                    label = "актуализировано" if result.get("status") == "actualized" else "уже актуально"
-                    st.success(f"✅ {city_name}: {label}")
-                else:
-                    st.error(f"❌ {city_name}: {result.get('error')}")
-
 
 # ─── ГЛАВНЫЙ ЭКРАН ──────────────────────────────────────────────────
 def show_main(project_id: str):
